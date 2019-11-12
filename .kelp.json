@@ -1,5 +1,4 @@
 {
-    "ogham/exa": "latest",
     "sharkdp/fd": "latest",
     "sharkdp/bat": "latest",
     "ubnt-intrepid/dot": "latest",
@@ -11,5 +10,6 @@
     "versent/saml2aws": "latest",
     "watchexec/watchexec": "latest",
     "wercker/stern": "latest",
-    "hashicorp/terraform": "latest"
+    "hashicorp/terraform": "latest",
+    "ogham/exa": "latest"
 }
