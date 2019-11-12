@@ -5,7 +5,8 @@ import pprint
 import sys
 import os
 from pathlib import Path
-
+from zipfile import ZipFile
+import magic
 
 # CONFIG
 home = str(Path.home())
@@ -21,6 +22,18 @@ def load_config():
     except FileNotFoundError:
         print("Kelp config file not found")
         sys.exit(1)
+
+def unzip_package(package):
+  # Create a ZipFile Object and load sample.zip in it
+    with ZipFile(package, 'r') as zipObj:
+       # Get a list of all archived file names from the zip
+       listOfFileNames = zipObj.namelist()
+       # Iterate over the file names
+       for fileName in listOfFileNames:
+           # Check file is a binary
+           if fileName.endswith('.csv'):
+               # Extract a single file from zip
+               zipObj.extract(fileName, 'temp_csv')
 
 
 def get_release(packages):
