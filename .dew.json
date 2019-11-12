@@ -8,5 +8,8 @@
     "termit/flycut": "latest",
     "rxhanson/rectangle": "latest",
     "lwouis/alt-tab-macos": "latest",
-    "versent/saml2aws": "latest"
+    "versent/saml2aws": "latest",
+    "watchexec/watchexec": "latest",
+    "wercker/stern": "latest",
+    "hashicorp/terraform": "latest"
 }
