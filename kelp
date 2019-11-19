@@ -2,10 +2,15 @@
 import json
 import os
 import pprint
+import shutil
 import sys
 import tarfile
+import tempfile
 import time
+from os import path, walk
+from os.path import isfile, join
 from pathlib import Path
+from subprocess import call
 from zipfile import ZipFile
 
 import click
@@ -15,7 +20,8 @@ import requests
 # CONFIG
 home = str(Path.home())
 KELP_DIR = home + '/.kelp/'
-DOWNLOAD_DIR = home + '/.kelp/packages/'  # needs the trailing slash
+DOWNLOAD_DIR = home + '/.kelp/cache/'  # needs the trailing slash
+EXTRACT_DIR = home + '/.kelp/cache/extract/'  # dirpath = tempfile.mkdtemp()
 
 
 def load_config():
@@ -29,66 +35,127 @@ def load_config():
         sys.exit(1)
 
 
-def file_is_binary(filename):
-    kind = filetype.guess(DOWNLOAD_DIR + filename)
-    if kind is None:
+def file_is_binary(filepath):
+    signatures = [
+        "CF FA ED FE 07 00 00 01 03 00 00 80 02 00 00 00 14 00 00 00 C8 0F 00 00 85 00 00 00 00 00 00 00",
+        "CF FA ED FE 07 00 00 01 03 00 00 00 02 00 00 00 0A 00 00 00 68 06 00 00 00 00 00 00 00 00 00 00",
+        "CF FA ED FE 07 00 00 01 03 00 00 80 02 00 00 00 14 00 00 00 F8 08 00 00 85 00 A0 00 00 00 00 00",
+        "CF FA ED FE 07 00 00 01 03 00 00 80 02 00 00 00 10 00 00 00 58 08 00 00 85 80 A1 00 00 00 00 00",
+        "CF FA ED FE 07 00 00 01 03 00 00 80 02 00 00 00 14 00 00 00 D8 09 00 00 85 00 A0 00 00 00 00 00",
+        "CF FA ED FE 07 00 00 01 03 00 00 80 02 00 00 00 12 00 00 00 38 08 00 00 85 00 A0 00 00 00 00 00",
+        "50 4B 03 04 14 00 00 00 08 00 65 A5 B0 4E BD 97 36 55 97 84 C8 00 88 CF 7C 02 09 00 1C 00 74 65"
+    ]
+    try:
+        file = open(filepath, "rb").read(32)
+        hex_bytes = " ".join(['{:02X}'.format(byte) for byte in file])
+        print(f"{filepath}: {hex_bytes}")
+        if hex_bytes in signatures:
+            return True
+        else:
+            return False
+    except IsADirectoryError:
         return False
-    print('File extension: %s' % kind.extension)
 
 
-def unzip_file(filename):
-    print("unzipping {}".format(filename))
-  # Create a ZipFile Object and load sample.zip in it
-    with ZipFile(DOWNLOAD_DIR + filename, 'r') as zipObj:
-        zipObj.extractall(path=DOWNLOAD_DIR)
+def unzip_file(filepath):
+    print(f"unzipping {filepath}")
+    with ZipFile(filepath, 'r') as zipObj:
+        zipObj.extractall(path=EXTRACT_DIR)
 
 
-def untar_file(filename):
-    print("untarring {}".format(filename))
-    with tarfile.open(DOWNLOAD_DIR + filename) as tar:
-        tar.extractall(path=DOWNLOAD_DIR)
+def untar_file(filepath):
+    print(f"untarring {filepath}")
+    with tarfile.open(filepath) as tar:
+        tar.extractall(path=EXTRACT_DIR)
+
+
+def exists_in_cache(filepath):
+    return path.exists(filepath)
 
 
 def download(download_url, filename):
-    print("downloading {}".format(filename))
+    print(f"downloading {filename}")
     response = requests.get(download_url)
     with open(DOWNLOAD_DIR + filename, 'wb') as f:
         f.write(response.content)
 
 
+def extract_packages():
+    for filename in os.listdir(DOWNLOAD_DIR):
+        filepath = os.path.join(DOWNLOAD_DIR, filename)
+        if filename.endswith(".zip"):
+            unzip_file(filepath)
+        if filename.endswith(".gz"):
+            untar_file(filepath)
+        if filename.endswith(".xz"):
+            untar_file(filepath)
+        if file_is_binary(filepath):
+            shutil.copy2(filepath, KELP_DIR)
+
+
+def move_binaries():
+    for (dirpath, dirnames, filenames) in walk(EXTRACT_DIR):
+        # copy .app files
+        for dn in dirnames:
+            if dn.endswith(".app"):
+                filepath = os.path.join(dirpath, dn)
+                call(['cp', '-r', filepath, KELP_DIR])
+        # copy binary files
+        for filename in filenames:
+            filepath = os.path.join(dirpath, filename)
+            if file_is_binary(filepath):
+                shutil.copy2(filepath, KELP_DIR)
+
+
 def install_packages(packages):
     for package in packages:
-        owner, repo = package.split("/")
         release = packages[package]
-        downloads = get_release_dl_url(owner, repo, release)
-        if downloads:
-            download_url = downloads['browser_download_url']
-            filename = downloads['filename']
-            download(download_url, filename)
-            if filename.endswith(".zip"):
-                unzip_file(filename)
-            if filename.endswith(".gz"):
-                untar_file(filename)
+        print(release)
+        owner, repo = package.split("/")
+        # support http projects
+        if release.startswith("http"):
+            filename = release.split("/")
+            download(release, filename[-1])
+        else:
+            # support github projects
+            downloads = get_release_dl_url(owner, repo, release)
+            if downloads:
+                download_url = downloads['browser_download_url']
+                filename = downloads['filename']
+                filepath = os.path.join(DOWNLOAD_DIR, filename)
+                if exists_in_cache(filepath):
+                    print(f"{filename} already exists in cache. skipping download")
+                else:
+                    download(download_url, filename)
         time.sleep(2)
 
 
 def get_release_dl_url(owner, repo, release):
-    r = requests.get(
-        'https://api.github.com/repos/{}/{}/releases/{}'.format(owner, repo, release))
+    api_token = os.getenv('GITHUB_TOKEN', None)
+    if api_token:
+        headers = {'Authorization': 'token %s' % api_token}
+        r = requests.get(
+            f'https://api.github.com/repos/{owner}/{repo}/releases/{release}', headers)
+    else:
+        r = requests.get(
+            f'https://api.github.com/repos/{owner}/{repo}/releases/{release}')
     response = r.json()
     downloads = {}
     try:
         assets = response['assets']
         for asset in assets:
+            # download mac binaries
             mac_identifiers = ['mac', 'macOs', 'darwin']
-            # TODO add .dmg support
-            if any(word in asset['browser_download_url'] for word in mac_identifiers) and asset['browser_download_url'].endswith(('zip', '.gz')):
+            if any(word in asset['browser_download_url'] for word in mac_identifiers):
                 downloads['browser_download_url'] = asset['browser_download_url']
+                downloads['filename'] = asset['name']
+            # download dmg
+            elif asset['browser_download_url'].endswith(".dmg"):
                 downloads['filename'] = asset['name']
                 return downloads
 
     except KeyError:
-        print("unable to download {}. Response was: {}".format(repo, response))
+        print(f"unable to download {repo}. Response was: {response}")
         return None
 
 
@@ -96,18 +163,23 @@ def get_release_dl_url(owner, repo, release):
 def init():
     os.mkdir(KELP_DIR)
     os.mkdir(DOWNLOAD_DIR)
+    print(f"🗒 Add Kelp to your path by running \n export PATH=/Users/Craig/.local/bin:$PATH")
 
 
 @click.command()
 def list():
     packages = load_config()
-    pprint.pprint(packages)
+    for package, release in packages.items():
+        print(package, release)
 
 
 @click.command()
 def install():
     packages = load_config()
-    install_packages(packages)
+    # install_packages(packages)
+    extract_packages()
+    move_binaries()
+    print(f"✅ Done!")
 
 
 @click.command()
