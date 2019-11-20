@@ -20,7 +20,7 @@ import requests
 # CONFIG
 home = str(Path.home())
 KELP_DIR = home + '/.kelp/'
-DOWNLOAD_DIR = home + '/.kelp/cache/'  # needs the trailing slash
+CACHE_DIR = home + '/.kelp/cache/'  # needs the trailing slash
 EXTRACT_DIR = home + '/.kelp/cache/extract/'  # dirpath = tempfile.mkdtemp()
 
 
@@ -48,7 +48,7 @@ def file_is_binary(filepath):
     try:
         file = open(filepath, "rb").read(32)
         hex_bytes = " ".join(['{:02X}'.format(byte) for byte in file])
-        print(f"{filepath}: {hex_bytes}")
+        #print(f"{filepath}: {hex_bytes}")
         if hex_bytes in signatures:
             return True
         else:
@@ -64,7 +64,7 @@ def unzip_file(filepath):
 
 
 def untar_file(filepath):
-    print(f"untarring {filepath}")
+    print(f"unzipping {filepath}")
     with tarfile.open(filepath) as tar:
         tar.extractall(path=EXTRACT_DIR)
 
@@ -76,19 +76,21 @@ def exists_in_cache(filepath):
 def download(download_url, filename):
     print(f"downloading {filename}")
     response = requests.get(download_url)
-    with open(DOWNLOAD_DIR + filename, 'wb') as f:
+    with open(CACHE_DIR + filename, 'wb') as f:
         f.write(response.content)
 
 
 def extract_packages():
-    for filename in os.listdir(DOWNLOAD_DIR):
-        filepath = os.path.join(DOWNLOAD_DIR, filename)
+    for filename in os.listdir(CACHE_DIR):
+        filepath = os.path.join(CACHE_DIR, filename)
         if filename.endswith(".zip"):
             unzip_file(filepath)
         if filename.endswith(".gz"):
             untar_file(filepath)
         if filename.endswith(".xz"):
             untar_file(filepath)
+        if filename.endswith(".dmg"):
+            shutil.copy2(filepath, KELP_DIR)
         if file_is_binary(filepath):
             shutil.copy2(filepath, KELP_DIR)
 
@@ -110,7 +112,6 @@ def move_binaries():
 def install_packages(packages):
     for package in packages:
         release = packages[package]
-        print(release)
         owner, repo = package.split("/")
         # support http projects
         if release.startswith("http"):
@@ -118,11 +119,11 @@ def install_packages(packages):
             download(release, filename[-1])
         else:
             # support github projects
-            downloads = get_release_dl_url(owner, repo, release)
-            if downloads:
-                download_url = downloads['browser_download_url']
-                filename = downloads['filename']
-                filepath = os.path.join(DOWNLOAD_DIR, filename)
+            release = get_release_dl_url(owner, repo, release)
+            if release:
+                download_url = release['browser_download_url']
+                filename = release['filename']
+                filepath = os.path.join(CACHE_DIR, filename)
                 if exists_in_cache(filepath):
                     print(f"{filename} already exists in cache. skipping download")
                 else:
@@ -151,8 +152,10 @@ def get_release_dl_url(owner, repo, release):
                 downloads['filename'] = asset['name']
             # download dmg
             elif asset['browser_download_url'].endswith(".dmg"):
+                downloads['browser_download_url'] = asset['browser_download_url']
                 downloads['filename'] = asset['name']
-                return downloads
+
+        return downloads
 
     except KeyError:
         print(f"unable to download {repo}. Response was: {response}")
@@ -162,7 +165,7 @@ def get_release_dl_url(owner, repo, release):
 @click.command()
 def init():
     os.mkdir(KELP_DIR)
-    os.mkdir(DOWNLOAD_DIR)
+    os.mkdir(CACHE_DIR)
     print(f"🗒 Add Kelp to your path by running \n export PATH=/Users/Craig/.local/bin:$PATH")
 
 
@@ -170,13 +173,13 @@ def init():
 def list():
     packages = load_config()
     for package, release in packages.items():
-        print(package, release)
+        print(f"{package}:{release}")
 
 
 @click.command()
 def install():
     packages = load_config()
-    # install_packages(packages)
+    install_packages(packages)
     extract_packages()
     move_binaries()
     print(f"✅ Done!")
@@ -186,6 +189,10 @@ def install():
 @click.argument('package')
 @click.argument('release')
 def add(package, release):
+    # TODO add input validation
+    # match = re.search("\d+\.\d+.\d+", "1.2.5")
+    # print match.group()
+
     packages = load_config()
     packages[package] = release
 
@@ -203,6 +210,11 @@ def remove(package):
         json.dump(packages, file, indent=4)
 
 
+@click.command()
+def inspect():
+    call(['open', KELP_DIR])
+
+
 @click.group()
 def cli():
     pass
@@ -213,6 +225,7 @@ cli.add_command(install)
 cli.add_command(init)
 cli.add_command(add)
 cli.add_command(remove)
+cli.add_command(inspect)
 
 if __name__ == "__main__":
     cli()
