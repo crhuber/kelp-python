@@ -7,6 +7,12 @@ install:
   - pip3 install pyinstaller
 script:
   - pyinstaller kelp
+before_deploy:
+  # Set up git user name and tag this commit
+  - git config --local user.name "kelpci"
+  - git config --local user.email "kelpci@email.com"
+  - export TRAVIS_TAG=${TRAVIS_TAG:-$(date +'%Y%m%d%H%M%S')-$(git log --format=%h -1)}
+  - git tag $TRAVIS_TAG
 deploy:
   provider: releases
   api_key: "GITHUB_TOKEN"
