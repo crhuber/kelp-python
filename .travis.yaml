@@ -1,0 +1,16 @@
+dist: xenial   # required for Python >= 3.7
+language: python
+python:
+  - "3.7"
+install:
+  - pip3 install -r requirements.txt
+  - pip3 install pyinstaller
+script:
+  - pyinstaller kelp
+deploy:
+  provider: releases
+  api_key: "GITHUB_TOKEN"
+  file: "./dist/kelp/kelp"
+  skip_cleanup: true
+  on:
+    tags: true
