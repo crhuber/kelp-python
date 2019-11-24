@@ -23,8 +23,7 @@ home = str(Path.home())
 KELP_DIR = home + '/.kelp/'
 KELP_BIN = home + '/.kelp/bin/'
 CACHE_DIR = home + '/.kelp/cache/'  # needs the trailing slash
-# home + '/.kelp/cache/extract/'  # dirpath = tempfile.mkdtemp()
-EXTRACT_DIR = dirpath = tempfile.mkdtemp()
+EXTRACT_DIR = tempfile.mkdtemp()
 
 
 def load_config():
@@ -43,8 +42,7 @@ def file_is_binary(filepath):
         "CF FA ED FE",
         "50 4B 03 04",
         "1F 8B 08 00",
-        "CF FA ED FE"
-        ""
+        "CF FA ED FE",
     ]
     try:
         file = open(filepath, "rb").read(32)
