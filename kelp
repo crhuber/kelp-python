@@ -133,10 +133,11 @@ def install_packages(packages):
 
 def get_release_dl_url(owner, repo, release):
     api_token = os.getenv('GITHUB_TOKEN', None)
-    if api_token:
+    api_username = os.getenv('GITHUB_USERNAME', None)
+    if api_token and api_username:
         headers = {'Authorization': 'token %s' % api_token}
         r = requests.get(
-            f'https://api.github.com/repos/{owner}/{repo}/releases/{release}', headers)
+            f'https://api.github.com/repos/{owner}/{repo}/releases/{release}', auth=(api_username, api_token))
     else:
         r = requests.get(
             f'https://api.github.com/repos/{owner}/{repo}/releases/{release}')
