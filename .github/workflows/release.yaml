@@ -22,7 +22,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
-          pyinstaller kelp
+          pyinstaller --onedirectory kelp
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1.0.0
