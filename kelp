@@ -8,6 +8,7 @@ import sys
 import tarfile
 import tempfile
 import time
+import stat
 from os import path, walk
 from os.path import isfile, join
 from pathlib import Path
@@ -50,7 +51,7 @@ def file_is_binary(filepath):
         #print(f"{filepath}: {hex_bytes}")
         match = False
         for signature in signatures:
-            if hex_bytes.startswith(signature) and not filepath.endswith((".dylib", ".tgz", ".gz", ".zip", ".pkg")):
+            if hex_bytes.startswith(signature) and not filepath.endswith((".dylib", ".tgz", ".gz", ".zip", ".pkg", ".app", ".saver")):
                 return True
         return False
     except IsADirectoryError:
@@ -85,27 +86,31 @@ def extract_packages():
         filepath = os.path.join(CACHE_DIR, filename)
         if filename.endswith(".zip"):
             unzip_file(filepath)
+        if filename.endswith(".xz"):
+            untar_file(filepath)
         if filename.endswith(".gz"):
             untar_file(filepath)
         if filename.endswith(".xz"):
             untar_file(filepath)
-        if filename.endswith(".dmg"):
-            shutil.copy2(filepath, KELP_BIN)
+        # some files come downloaded unzipped
         if file_is_binary(filepath):
             shutil.copy2(filepath, KELP_BIN)
 
 
 def move_binaries():
     for (dirpath, dirnames, filenames) in walk(EXTRACT_DIR):
-        # copy .app files
-        for dn in dirnames:
-            if dn.endswith(".app"):
-                filepath = os.path.join(dirpath, dn)
-                call(['cp', '-r', filepath, KELP_BIN])
+        # # copy .app files
+        # for dn in dirnames:
+        #     if dn.endswith(".app"):
+        #         filepath = os.path.join(dirpath, dn)
+        #         call(['cp', '-r', filepath, KELP_BIN])
         # copy binary files
         for filename in filenames:
             filepath = os.path.join(dirpath, filename)
             if file_is_binary(filepath):
+                # add executable bit to file
+                st = os.stat(filepath)
+                os.chmod(filepath, st.st_mode | stat.S_IEXEC)
                 shutil.copy2(filepath, KELP_BIN)
 
 
@@ -147,12 +152,17 @@ def get_release_dl_url(owner, repo, release):
         assets = response['assets']
         for asset in assets:
             # download mac binaries
-            mac_identifiers = ['mac', 'macOs', 'darwin']
+            mac_identifiers = ['mac', 'macOs', 'macos', 'darwin', 'osx']
             if any(word in asset['browser_download_url'] for word in mac_identifiers):
-                downloads['browser_download_url'] = asset['browser_download_url']
-                downloads['filename'] = asset['name']
-            # download dmg or pkg
-            elif asset['browser_download_url'].endswith((".dmg", ".pkg")):
+                if asset['browser_download_url'].endswith(('.zip', '.tar', '.gz', '.xz', '.dmg', '.pkg', '.tgz')):
+                    downloads['browser_download_url'] = asset['browser_download_url']
+                    downloads['filename'] = asset['name']
+                else:
+                    # some releases like stern dont have an extension: ie stern_darwin_amd64
+                    downloads['browser_download_url'] = asset['browser_download_url']
+                    downloads['filename'] = asset['name']
+            # some packages are made specifically for mac. ie: screensavers, apps
+            elif asset['browser_download_url'].endswith((".dmg", ".pkg", ".saver.zip", "app.zip")):
                 downloads['browser_download_url'] = asset['browser_download_url']
                 downloads['filename'] = asset['name']
 
