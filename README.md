@@ -1,3 +1,6 @@
+<p align="center">
+  <img height="150px" src="./logo.png"  alt="KELP" title="KELP">
+</p>
 # KELP
 A simple python replacement for homebrew for installing binary packages on MacOS
 
