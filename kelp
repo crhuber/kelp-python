@@ -157,6 +157,9 @@ def get_release_dl_url(owner, repo, release):
                 if asset['browser_download_url'].endswith(('.zip', '.tar', '.gz', '.xz', '.dmg', '.pkg', '.tgz')):
                     downloads['browser_download_url'] = asset['browser_download_url']
                     downloads['filename'] = asset['name']
+                # skip ones like sha256 for example istio-1.4.0-osx.tar.gz.sha256
+                elif asset['browser_download_url'].endswith(('.sha256')):
+                    continue
                 else:
                     # some releases like stern dont have an extension: ie stern_darwin_amd64
                     downloads['browser_download_url'] = asset['browser_download_url']
