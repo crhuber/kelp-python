@@ -48,7 +48,7 @@ def file_is_binary(filepath):
     try:
         file = open(filepath, "rb").read(32)
         hex_bytes = " ".join(['{:02X}'.format(byte) for byte in file])
-        #print(f"{filepath}: {hex_bytes}")
+        # print(f"{filepath}: {hex_bytes}")
         match = False
         for signature in signatures:
             if hex_bytes.startswith(signature) and not filepath.endswith((".dylib", ".tgz", ".gz", ".zip", ".pkg", ".app", ".saver")):
@@ -114,6 +114,35 @@ def move_binaries():
                 shutil.copy2(filepath, KELP_BIN)
 
 
+def find_release_assets(owner, repo, release):
+    api_token = os.getenv('GITHUB_TOKEN', None)
+    api_username = os.getenv('GITHUB_USERNAME', None)
+
+    # else just get the latest
+    if release == "latest":
+        if api_token and api_username:
+            r = requests.get(
+                f'https://api.github.com/repos/{owner}/{repo}/releases/{release}', auth=(api_username, api_token))
+        else:
+            r = requests.get(
+                f'https://api.github.com/repos/{owner}/{repo}/releases/{release}')
+        response = r.json()
+        assets = response['assets']
+        return assets
+    else:
+        # get releases by tag
+        if api_token and api_username:
+            r = requests.get(
+                f'https://api.github.com/repos/{owner}/{repo}/releases', auth=(api_username, api_token))
+        else:
+            r = requests.get(
+                f'https://api.github.com/repos/{owner}/{repo}/releases')
+        response = r.json()
+        for rel in response:
+            if rel['tag_name'] == release:
+                return rel['assets']
+
+
 def install_packages(packages):
     for package in packages:
         release = packages[package]
@@ -124,56 +153,43 @@ def install_packages(packages):
             download(release, filename[-1])
         else:
             # support github projects
-            release = get_release_dl_url(owner, repo, release)
-            if release:
-                download_url = release['browser_download_url']
-                filename = release['filename']
-                filepath = os.path.join(CACHE_DIR, filename)
-                if exists_in_cache(filepath):
-                    print(f"{filename} already exists in cache.. Skipping download")
-                else:
-                    download(download_url, filename)
-        time.sleep(2)
+            assets = find_release_assets(owner, repo, release)
+            if assets:
+                asset_dl_url = get_asset_dl_url(assets)
+                if 'browser_download_url' in asset_dl_url:
+                    download_url = asset_dl_url['browser_download_url']
+                    filename = asset_dl_url['filename']
+                    filepath = os.path.join(CACHE_DIR, filename)
+                    if exists_in_cache(filepath):
+                        print(
+                            f"{filename} already exists in cache.. Skipping download")
+                    else:
+                        download(download_url, filename)
+        time.sleep(1)
 
 
-def get_release_dl_url(owner, repo, release):
-    api_token = os.getenv('GITHUB_TOKEN', None)
-    api_username = os.getenv('GITHUB_USERNAME', None)
-    if api_token and api_username:
-        headers = {'Authorization': 'token %s' % api_token}
-        r = requests.get(
-            f'https://api.github.com/repos/{owner}/{repo}/releases/{release}', auth=(api_username, api_token))
-    else:
-        r = requests.get(
-            f'https://api.github.com/repos/{owner}/{repo}/releases/{release}')
-    response = r.json()
-    downloads = {}
-    try:
-        assets = response['assets']
-        for asset in assets:
-            # download mac binaries
-            mac_identifiers = ['mac', 'macOs', 'macos', 'darwin', 'osx']
-            if any(word in asset['browser_download_url'] for word in mac_identifiers):
-                if asset['browser_download_url'].endswith(('.zip', '.tar', '.gz', '.xz', '.dmg', '.pkg', '.tgz')):
-                    downloads['browser_download_url'] = asset['browser_download_url']
-                    downloads['filename'] = asset['name']
-                # skip ones like sha256 for example istio-1.4.0-osx.tar.gz.sha256
-                elif asset['browser_download_url'].endswith(('.sha256')):
-                    continue
-                else:
-                    # some releases like stern dont have an extension: ie stern_darwin_amd64
-                    downloads['browser_download_url'] = asset['browser_download_url']
-                    downloads['filename'] = asset['name']
-            # some packages are made specifically for mac. ie: screensavers, apps
-            elif asset['browser_download_url'].endswith((".dmg", ".pkg", ".saver.zip", "app.zip")):
-                downloads['browser_download_url'] = asset['browser_download_url']
-                downloads['filename'] = asset['name']
+def get_asset_dl_url(assets):
+    download = {}
+    for asset in assets:
+        # download mac binaries
+        mac_identifiers = ['mac', 'macOs', 'macos', 'darwin', 'osx']
+        if any(word in asset['browser_download_url'] for word in mac_identifiers):
+            if asset['browser_download_url'].endswith(('.zip', '.tar', '.gz', '.xz', '.dmg', '.pkg', '.tgz')):
+                download['browser_download_url'] = asset['browser_download_url']
+                download['filename'] = asset['name']
+            # skip ones like sha256 for example istio-1.4.0-osx.tar.gz.sha256
+            elif asset['browser_download_url'].endswith(('.sha256')):
+                continue
+            else:
+                # some releases like stern dont have an extension: ie stern_darwin_amd64
+                download['browser_download_url'] = asset['browser_download_url']
+                download['filename'] = asset['name']
+        # some packages are made specifically for mac. ie: screensavers, apps
+        elif asset['browser_download_url'].endswith((".dmg", ".pkg", ".saver.zip", "app.zip")):
+            download['browser_download_url'] = asset['browser_download_url']
+            download['filename'] = asset['name']
 
-        return downloads
-
-    except KeyError:
-        print(f"Unable to download {repo}. Response was: {response}")
-        return None
+    return download
 
 
 @click.command()
