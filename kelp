@@ -69,6 +69,12 @@ def untar_file(filepath):
     with tarfile.open(filepath) as tar:
         tar.extractall(path=EXTRACT_DIR)
 
+def untar_file2(filepath):
+    print(f"Unzipping {filepath}")
+    extract_dir = tempfile.mkdtemp()
+    with tarfile.open(filepath) as tar:
+        tar.extractall(path=extract_dir)
+    return extract_dir
 
 def exists_in_cache(filepath):
     return path.exists(filepath)
@@ -76,9 +82,33 @@ def exists_in_cache(filepath):
 
 def download(download_url, filename):
     print(f"Downloading {filename}")
-    response = requests.get(download_url)
-    with open(CACHE_DIR + filename, 'wb') as f:
-        f.write(response.content)
+    downloaded = False
+    try:
+        response = requests.get(download_url)
+        with open(CACHE_DIR + filename, 'wb') as f:
+            f.write(response.content)
+        downloaded = True
+        return downloaded
+    except:
+        return downloaded
+
+def extract_package(filepath):
+    extract_dir = None
+    if filepath.endswith(".zip"):
+        extract_dir = unzip_file(filepath)
+    elif filepath.endswith(".xz"):
+        extract_dir = untar_file2(filepath)
+    elif filepath.endswith(".gz"):
+        extract_dir = untar_file2(filepath)
+    elif filepath.endswith(".xz"):
+        extract_dir = untar_file2(filepath)
+    # some files come downloaded unzipped
+    elif file_is_binary(filepath):
+        print(f"{filepath} already unzipped and a binary copying to kelp bin..")
+        shutil.copy2(filepath, KELP_BIN)
+    else:
+        print(f"{filepath} is not an archive")
+    return extract_dir
 
 
 def extract_packages():
@@ -108,6 +138,14 @@ def move_binaries():
         for filename in filenames:
             filepath = os.path.join(dirpath, filename)
             if file_is_binary(filepath):
+                shutil.copy2(filepath, KELP_BIN)
+
+def move_binaries2(extract_dir):
+    for (dirpath, dirnames, filenames) in walk(extract_dir):
+        for filename in filenames:
+            filepath = os.path.join(dirpath, filename)
+            if file_is_binary(filepath):
+                print(f"Moving executable {filename} to Kelp bin..")
                 shutil.copy2(filepath, KELP_BIN)
 
 def make_binaries_executable():
@@ -172,6 +210,35 @@ def install_packages(packages):
                         download(download_url, filename)
         time.sleep(1)
 
+def install_package(package, release):
+    owner, repo = package.split("/")
+    install_result = {}
+    # support http projects
+    if release.startswith("http"):
+        filename = release.split("/")
+        filepath = os.path.join(CACHE_DIR, filename)
+        if exists_in_cache(filepath):
+            print(
+                f"{filename} already exists in cache.. Skipping download")
+        else:
+            download(release, filename[-1])
+        install_result['filepath'] = filepath
+    else:
+        # support github projects
+        assets = find_release_assets(owner, repo, release)
+        if assets:
+            asset_dl_url = get_asset_dl_url(assets)
+            if 'browser_download_url' in asset_dl_url:
+                download_url = asset_dl_url['browser_download_url']
+                filename = asset_dl_url['filename']
+                filepath = os.path.join(CACHE_DIR, filename)
+                if exists_in_cache(filepath):
+                    print(
+                        f"{filename} already exists in cache.. Skipping download")
+                else:
+                    download(download_url, filename)
+                install_result['filepath'] = filepath
+    return install_result
 
 def get_asset_dl_url(assets):
     download = {}
@@ -215,6 +282,19 @@ def list():
     for package, release in packages.items():
         print(f"{package}:{release}")
 
+@click.command()
+@click.argument('package')
+def update(package):
+    packages = load_config()
+    try:
+        release = packages[package]
+        install_result = install_package(package, release)
+        extract_dir = extract_package(install_result['filepath'])
+        if extract_dir:
+            move_binaries2(extract_dir)
+        print(f"✓ {package}:{release} installed")
+    except KeyError:
+        print(f"Package not found in your config, try installing it first")
 
 @click.command()
 def install():
@@ -273,6 +353,7 @@ cli.add_command(list)
 cli.add_command(install)
 cli.add_command(init)
 cli.add_command(add)
+cli.add_command(update)
 cli.add_command(remove)
 cli.add_command(inspect)
 
