@@ -276,6 +276,18 @@ def get_asset_dl_url(assets):
 
     return download
 
+def find_fullpkg_name(packages, shortname):
+    """ Allow users to use shortname istio instead of istio/istio """
+    package_found = False
+    for pkg in packages:
+        psplit = pkg.split("/")
+        prepo = psplit[-1]
+        if prepo == shortname:
+            package_found = True
+            return pkg
+    if not package_found:
+        print(f"Package not found in your config, try installing it first")
+        exit()
 
 @click.command()
 def init():
@@ -302,7 +314,10 @@ def update(package):
     try:
         release = packages[package]
     except KeyError:
-        print(f"Package not found in your config, try installing it first {e}")
+        # allow users to use shortname istio instead of istio/istio
+        package = find_fullpkg_name(packages, package)
+        release = packages[package]
+
     download_result = install_package(package, release)
     if download_result:
         extract_dir = extract_package(download_result['filepath'])
