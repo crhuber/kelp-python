@@ -9,6 +9,7 @@ import tarfile
 import tempfile
 import time
 import stat
+import webbrowser
 from os import path, walk
 from os.path import isfile, join
 from pathlib import Path
@@ -24,8 +25,6 @@ home = str(Path.home())
 KELP_DIR = home + '/.kelp/'
 KELP_BIN = home + '/.kelp/bin/'
 CACHE_DIR = home + '/.kelp/cache/'  # needs the trailing slash
-EXTRACT_DIR = tempfile.mkdtemp()
-
 
 def load_config():
     try:
@@ -326,6 +325,30 @@ def remove(package):
 def inspect():
     call(['open', KELP_DIR])
 
+@click.command()
+@click.argument('package')
+def browse(package):
+    packages = load_config()
+    package = find_fullpkg_name(packages, package)
+    url = 'https://github.com/'+ package
+    webbrowser.open(url, new=2)
+
+@click.command()
+def upgrade():
+    package = "crhuber/kelp"
+    release = "latest"
+    try:
+        print(f"\n===> Upgrading {package}")
+        download_result = download_package(package, release)
+        if download_result:
+            move_binaries(extract_dir)
+            print(f"✓ Installed {package}:{release}")
+        else:
+            print(f"✗ Error installing {package}:{release}")
+    except Exception as e:
+        print(f"✗ Error installing {package}:{release}. \n{e}")
+
+
 @click.group()
 def cli():
     pass
@@ -338,6 +361,8 @@ cli.add_command(add)
 cli.add_command(update)
 cli.add_command(remove)
 cli.add_command(inspect)
+cli.add_command(browse)
+cli.add_command(upgrade)
 
 if __name__ == "__main__":
     cli()
