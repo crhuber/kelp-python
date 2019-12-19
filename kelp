@@ -63,6 +63,12 @@ def unzip_file(filepath):
     with ZipFile(filepath, 'r') as zipObj:
         zipObj.extractall(path=EXTRACT_DIR)
 
+def unzip_file2(filepath):
+    print(f"Unzipping {filepath}")
+    extract_dir = tempfile.mkdtemp()
+    with ZipFile(filepath, 'r') as zipObj:
+        zipObj.extractall(path=extract_dir)
+    return extract_dir
 
 def untar_file(filepath):
     print(f"Unzipping {filepath}")
@@ -95,7 +101,7 @@ def download(download_url, filename):
 def extract_package(filepath):
     extract_dir = None
     if filepath.endswith(".zip"):
-        extract_dir = unzip_file(filepath)
+        extract_dir = unzip_file2(filepath)
     elif filepath.endswith(".xz"):
         extract_dir = untar_file2(filepath)
     elif filepath.endswith(".gz"):
@@ -215,13 +221,14 @@ def install_package(package, release):
     install_result = {}
     # support http projects
     if release.startswith("http"):
-        filename = release.split("/")
+        # split url path and grab last element
+        filename = release.split("/")[-1]
         filepath = os.path.join(CACHE_DIR, filename)
         if exists_in_cache(filepath):
             print(
                 f"{filename} already exists in cache.. Skipping download")
         else:
-            download(release, filename[-1])
+            download(release, filename)
         install_result['filepath'] = filepath
     else:
         # support github projects
