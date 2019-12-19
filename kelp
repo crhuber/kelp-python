@@ -104,6 +104,8 @@ def extract_package(filepath):
         extract_dir = unzip_file2(filepath)
     elif filepath.endswith(".xz"):
         extract_dir = untar_file2(filepath)
+    elif filepath.endswith(".tgz"):
+        extract_dir = untar_file2(filepath)
     elif filepath.endswith(".gz"):
         extract_dir = untar_file2(filepath)
     elif filepath.endswith(".xz"):
@@ -148,11 +150,15 @@ def move_binaries():
 
 def move_binaries2(extract_dir):
     for (dirpath, dirnames, filenames) in walk(extract_dir):
-        for filename in filenames:
-            filepath = os.path.join(dirpath, filename)
-            if file_is_binary(filepath):
-                print(f"Moving executable {filename} to Kelp bin..")
-                shutil.copy2(filepath, KELP_BIN)
+        # dont walk the contents of .app files.
+        if ".app" in dirpath:
+            pass
+        else:
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                if file_is_binary(filepath):
+                    print(f"Moving executable {filename} to Kelp bin..")
+                    shutil.copy2(filepath, KELP_BIN)
 
 def make_binaries_executable():
     for (dirpath, dirnames, filenames) in walk(KELP_BIN):
@@ -295,13 +301,17 @@ def update(package):
     packages = load_config()
     try:
         release = packages[package]
-        install_result = install_package(package, release)
-        extract_dir = extract_package(install_result['filepath'])
+    except KeyError:
+        print(f"Package not found in your config, try installing it first {e}")
+    download_result = install_package(package, release)
+    if download_result:
+        extract_dir = extract_package(download_result['filepath'])
         if extract_dir:
             move_binaries2(extract_dir)
         print(f"✓ {package}:{release} installed")
-    except KeyError:
-        print(f"Package not found in your config, try installing it first")
+    else:
+        print(f"✗ error installing {package}:{release}")
+
 
 @click.command()
 def install():
