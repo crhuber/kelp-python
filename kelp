@@ -108,11 +108,16 @@ def move_binaries():
         for filename in filenames:
             filepath = os.path.join(dirpath, filename)
             if file_is_binary(filepath):
-                # add executable bit to file
-                st = os.stat(filepath)
-                os.chmod(filepath, st.st_mode | stat.S_IEXEC)
                 shutil.copy2(filepath, KELP_BIN)
 
+def make_binaries_executable():
+    for (dirpath, dirnames, filenames) in walk(KELP_BIN):
+        for filename in filenames:
+            filepath = os.path.join(dirpath, filename)
+            if file_is_binary(filepath):
+                # add executable bit to file
+                st = os.stat(filepath)
+                os.chmod(filepath, 0o775)
 
 def find_release_assets(owner, repo, release):
     api_token = os.getenv('GITHUB_TOKEN', None)
@@ -217,6 +222,7 @@ def install():
     install_packages(packages)
     extract_packages()
     move_binaries()
+    make_binaries_executable()
     print(f"✅ Done!")
 
 
