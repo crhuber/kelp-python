@@ -9,6 +9,7 @@ import tarfile
 import tempfile
 import time
 import stat
+import webbrowser
 from os import path, walk
 from os.path import isfile, join
 from pathlib import Path
@@ -24,8 +25,6 @@ home = str(Path.home())
 KELP_DIR = home + '/.kelp/'
 KELP_BIN = home + '/.kelp/bin/'
 CACHE_DIR = home + '/.kelp/cache/'  # needs the trailing slash
-EXTRACT_DIR = tempfile.mkdtemp()
-
 
 def load_config():
     try:
@@ -36,7 +35,6 @@ def load_config():
     except FileNotFoundError:
         print("Kelp config file not found")
         sys.exit(1)
-
 
 def file_is_binary(filepath):
     signatures = [
@@ -57,58 +55,67 @@ def file_is_binary(filepath):
     except IsADirectoryError:
         return False
 
-
 def unzip_file(filepath):
     print(f"Unzipping {filepath}")
+    extract_dir = tempfile.mkdtemp()
     with ZipFile(filepath, 'r') as zipObj:
-        zipObj.extractall(path=EXTRACT_DIR)
-
+        zipObj.extractall(path=extract_dir)
+    return extract_dir
 
 def untar_file(filepath):
     print(f"Unzipping {filepath}")
+    extract_dir = tempfile.mkdtemp()
     with tarfile.open(filepath) as tar:
-        tar.extractall(path=EXTRACT_DIR)
-
+        tar.extractall(path=extract_dir)
+    return extract_dir
 
 def exists_in_cache(filepath):
     return path.exists(filepath)
 
-
 def download(download_url, filename):
     print(f"Downloading {filename}")
-    response = requests.get(download_url)
-    with open(CACHE_DIR + filename, 'wb') as f:
-        f.write(response.content)
+    downloaded = False
+    try:
+        response = requests.get(download_url)
+        with open(CACHE_DIR + filename, 'wb') as f:
+            f.write(response.content)
+        downloaded = True
+        return downloaded
+    except:
+        return downloaded
+
+def extract_package(filepath):
+    extract_dir = None
+    if filepath.endswith(".zip"):
+        extract_dir = unzip_file(filepath)
+    elif filepath.endswith(".xz"):
+        extract_dir = untar_file(filepath)
+    elif filepath.endswith(".tgz"):
+        extract_dir = untar_file(filepath)
+    elif filepath.endswith(".gz"):
+        extract_dir = untar_file(filepath)
+    elif filepath.endswith(".xz"):
+        extract_dir = untar_file(filepath)
+    # some files come downloaded unzipped
+    elif file_is_binary(filepath):
+        print(f"{filepath} already unzipped and a binary copying to kelp bin..")
+        shutil.copy2(filepath, KELP_BIN)
+    else:
+        print(f"{filepath} is not an archive")
+    return extract_dir
 
 
-def extract_packages():
-    for filename in os.listdir(CACHE_DIR):
-        filepath = os.path.join(CACHE_DIR, filename)
-        if filename.endswith(".zip"):
-            unzip_file(filepath)
-        if filename.endswith(".xz"):
-            untar_file(filepath)
-        if filename.endswith(".gz"):
-            untar_file(filepath)
-        if filename.endswith(".xz"):
-            untar_file(filepath)
-        # some files come downloaded unzipped
-        if file_is_binary(filepath):
-            shutil.copy2(filepath, KELP_BIN)
-
-
-def move_binaries():
-    for (dirpath, dirnames, filenames) in walk(EXTRACT_DIR):
-        # # copy .app files
-        # for dn in dirnames:
-        #     if dn.endswith(".app"):
-        #         filepath = os.path.join(dirpath, dn)
-        #         call(['cp', '-r', filepath, KELP_BIN])
-        # copy binary files
-        for filename in filenames:
-            filepath = os.path.join(dirpath, filename)
-            if file_is_binary(filepath):
-                shutil.copy2(filepath, KELP_BIN)
+def move_binaries(extract_dir):
+    for (dirpath, dirnames, filenames) in walk(extract_dir):
+        # dont walk the contents of .app files.
+        if ".app" in dirpath:
+            pass
+        else:
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                if file_is_binary(filepath):
+                    print(f"Moving executable {filename} to Kelp bin..")
+                    shutil.copy2(filepath, KELP_BIN)
 
 def make_binaries_executable():
     for (dirpath, dirnames, filenames) in walk(KELP_BIN):
@@ -147,31 +154,36 @@ def find_release_assets(owner, repo, release):
             if rel['tag_name'] == release:
                 return rel['assets']
 
-
-def install_packages(packages):
-    for package in packages:
-        release = packages[package]
-        owner, repo = package.split("/")
-        # support http projects
-        if release.startswith("http"):
-            filename = release.split("/")
-            download(release, filename[-1])
+def download_package(package, release):
+    owner, repo = package.split("/")
+    install_result = {}
+    # support http projects
+    if release.startswith("http"):
+        # split url path and grab last element
+        filename = release.split("/")[-1]
+        filepath = os.path.join(CACHE_DIR, filename)
+        if exists_in_cache(filepath):
+            print(
+                f"Skipping download.. {filename} already exists in cache")
         else:
-            # support github projects
-            assets = find_release_assets(owner, repo, release)
-            if assets:
-                asset_dl_url = get_asset_dl_url(assets)
-                if 'browser_download_url' in asset_dl_url:
-                    download_url = asset_dl_url['browser_download_url']
-                    filename = asset_dl_url['filename']
-                    filepath = os.path.join(CACHE_DIR, filename)
-                    if exists_in_cache(filepath):
-                        print(
-                            f"{filename} already exists in cache.. Skipping download")
-                    else:
-                        download(download_url, filename)
-        time.sleep(1)
-
+            download(release, filename)
+        install_result['filepath'] = filepath
+    else:
+        # support github projects
+        assets = find_release_assets(owner, repo, release)
+        if assets:
+            asset_dl_url = get_asset_dl_url(assets)
+            if 'browser_download_url' in asset_dl_url:
+                download_url = asset_dl_url['browser_download_url']
+                filename = asset_dl_url['filename']
+                filepath = os.path.join(CACHE_DIR, filename)
+                if exists_in_cache(filepath):
+                    print(
+                        f"Skipping download.. {filename} already exists in cache.. ")
+                else:
+                    download(download_url, filename)
+                install_result['filepath'] = filepath
+    return install_result
 
 def get_asset_dl_url(assets):
     download = {}
@@ -196,6 +208,18 @@ def get_asset_dl_url(assets):
 
     return download
 
+def find_fullpkg_name(packages, shortname):
+    """ Allow users to use shortname istio instead of istio/istio """
+    package_found = False
+    for pkg in packages:
+        psplit = pkg.split("/")
+        prepo = psplit[-1]
+        if prepo == shortname:
+            package_found = True
+            return pkg
+    if not package_found:
+        print(f"Package not found in your config, try installing it first")
+        exit()
 
 @click.command()
 def init():
@@ -215,22 +239,62 @@ def list():
     for package, release in packages.items():
         print(f"{package}:{release}")
 
+@click.command()
+@click.argument('package')
+def update(package):
+    packages = load_config()
+    try:
+        try:
+            release = packages[package]
+        except KeyError:
+            # allow users to use shortname istio instead of istio/istio
+            package = find_fullpkg_name(packages, package)
+            release = packages[package]
+        download_result = download_package(package, release)
+        if download_result:
+            extract_dir = extract_package(download_result['filepath'])
+            if extract_dir:
+                move_binaries(extract_dir)
+            make_binaries_executable()
+            print(f"✓ Installed {package}:{release}")
+        else:
+            print(f"✗ Error installing {package}:{release}")
+    except Exception as e:
+        print(f"✗ Error installing {package}:{release}. \n {e}")
+
+
 
 @click.command()
 def install():
     packages = load_config()
-    install_packages(packages)
-    extract_packages()
-    move_binaries()
+    for package in packages:
+        print(f"\n===> Installing {package}")
+        try:
+            try:
+                release = packages[package]
+            except KeyError:
+                # allow users to use shortname istio instead of istio/istio
+                package = find_fullpkg_name(packages, package)
+                release = packages[package]
+            download_result = download_package(package, release)
+            if download_result:
+                extract_dir = extract_package(download_result['filepath'])
+                if extract_dir:
+                    move_binaries(extract_dir)
+                print(f"✓ Installed {package}:{release}")
+            else:
+                print(f"✗ Error installing {package}:{release}")
+        except Exception as e:
+            print(f"✗ Error installing {package}:{release}. \n{e}")
+        time.sleep(0.7)
     make_binaries_executable()
-    print(f"✅ Done!")
+    print(f"\n✅ Done!")
 
 
 @click.command()
 @click.argument('package')
 @click.argument('release')
 def add(package, release):
-
     match = re.search("\d+\.\d+.\d+", release)
     if not match:
         if not release.startswith("http"):
@@ -248,7 +312,6 @@ def add(package, release):
     with open(KELP_DIR + '.kelp.json', "w") as file:
         json.dump(packages, file, indent=4)
 
-
 @click.command()
 @click.argument('package')
 def remove(package):
@@ -258,10 +321,32 @@ def remove(package):
     with open(KELP_DIR + '.kelp.json', "w") as file:
         json.dump(packages, file, indent=4)
 
-
 @click.command()
 def inspect():
     call(['open', KELP_DIR])
+
+@click.command()
+@click.argument('package')
+def browse(package):
+    packages = load_config()
+    package = find_fullpkg_name(packages, package)
+    url = 'https://github.com/'+ package
+    webbrowser.open(url, new=2)
+
+@click.command()
+def upgrade():
+    package = "crhuber/kelp"
+    release = "latest"
+    try:
+        print(f"\n===> Upgrading {package}")
+        download_result = download_package(package, release)
+        if download_result:
+            move_binaries(extract_dir)
+            print(f"✓ Installed {package}:{release}")
+        else:
+            print(f"✗ Error installing {package}:{release}")
+    except Exception as e:
+        print(f"✗ Error installing {package}:{release}. \n{e}")
 
 
 @click.group()
@@ -273,8 +358,11 @@ cli.add_command(list)
 cli.add_command(install)
 cli.add_command(init)
 cli.add_command(add)
+cli.add_command(update)
 cli.add_command(remove)
 cli.add_command(inspect)
+cli.add_command(browse)
+cli.add_command(upgrade)
 
 if __name__ == "__main__":
     cli()
