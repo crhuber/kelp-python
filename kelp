@@ -127,6 +127,7 @@ def make_binaries_executable():
                 os.chmod(filepath, 0o775)
 
 def find_release_assets(owner, repo, release):
+    """Makes a request to github and finds all releases for a repo"""
     api_token = os.getenv('GITHUB_TOKEN', None)
     api_username = os.getenv('GITHUB_USERNAME', None)
 
@@ -186,6 +187,9 @@ def download_package(package, release):
     return install_result
 
 def get_asset_dl_url(assets):
+    """
+    For a list of given release assetes, tries to find one for mac that is appropriate
+    """
     download = {}
     for asset in assets:
         # download mac binaries
@@ -337,14 +341,17 @@ def browse(package):
 def upgrade():
     package = "crhuber/kelp"
     release = "latest"
+    owner, repo = package.split("/")
     try:
         print(f"\n===> Upgrading {package}")
-        download_result = download_package(package, release)
-        if download_result:
-            move_binaries(extract_dir)
-            print(f"✓ Installed {package}:{release}")
-        else:
-            print(f"✗ Error installing {package}:{release}")
+        assets = find_release_assets(owner, repo, release)
+        for asset in assets:
+            if 'browser_download_url' in asset:
+                download_url = asset['browser_download_url']
+                filename = 'kelp'
+                download(download_url, filename)
+                print(f"\n✅ Kelp downloaded to: {CACHE_DIR}{filename}")
+
     except Exception as e:
         print(f"✗ Error installing {package}:{release}. \n{e}")
 
