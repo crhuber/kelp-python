@@ -10,10 +10,11 @@ import tempfile
 import time
 import stat
 import webbrowser
+import subprocess
 from os import path, walk
 from os.path import isfile, join
 from pathlib import Path
-from subprocess import call
+from subprocess import run
 from zipfile import ZipFile
 
 import click
@@ -355,6 +356,33 @@ def upgrade():
     except Exception as e:
         print(f"✗ Error installing {package}:{release}. \n{e}")
 
+def find_semver(version_str):
+    rexpression = "v?(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?"
+    match = re.search(rexpression, version_str)
+    if match:
+        print(match[0])
+
+@click.command()
+@click.argument('package')
+def version(package):
+    try:
+        process = subprocess.run([package, 'version'],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        universal_newlines=True)
+        if process.returncode == 0:
+            find_semver(process.stdout)
+        elif process.returncode == 1 or 2:
+            process = subprocess.run([package, '--version'],
+                    stdout=subprocess.PIPE,
+                    universal_newlines=True)
+            find_semver(process.stdout)
+    except FileNotFoundError:
+        print(f"{package} not found")
+
+
+
+
 
 @click.group()
 def cli():
@@ -370,6 +398,7 @@ cli.add_command(remove)
 cli.add_command(inspect)
 cli.add_command(browse)
 cli.add_command(upgrade)
+cli.add_command(version)
 
 if __name__ == "__main__":
     cli()
