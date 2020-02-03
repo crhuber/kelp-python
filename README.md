@@ -15,6 +15,12 @@ cumberson to switch between different terraform versions. Here is why I built Ke
 * Keep all your computers up to date with a single installation manifest
 * Install multiple packages at one time.
 
+## How To Install
+
+```
+curl https://github.com/crhuber/kelp/releases/download/v0.2.2/kelp -o ~/kelp
+chmod +x ~/kelp
+```
 
 ## How Does it Work?
 
@@ -84,7 +90,7 @@ kelp add hashicorp/terraform https://releases.hashicorp.com/terraform/0.11.13/te
 
 ### Why wasnt my package installed ?
 
-Kelp looks for binaries made for MacOS, if it finds a binary for linux or windows it will skip downloading it. 
+Kelp looks for binaries made for MacOS, if it finds a binary for linux or windows it will skip downloading it.
 
 ### Why is kelp so slow?
 
