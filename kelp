@@ -298,8 +298,8 @@ def install():
 
 @click.command()
 @click.argument('package')
-@click.argument('release')
-def add(package, release):
+@click.argument('release', required=False)
+def add(package, release="latest"):
     match = re.search("\d+\.\d+.\d+", release)
     if not match:
         if not release.startswith("http"):
