@@ -10,10 +10,11 @@ import tempfile
 import time
 import stat
 import webbrowser
+import subprocess
 from os import path, walk
 from os.path import isfile, join
 from pathlib import Path
-from subprocess import call
+from subprocess import run
 from zipfile import ZipFile
 
 import click
@@ -327,7 +328,7 @@ def remove(package):
 
 @click.command()
 def inspect():
-    call(['open', KELP_DIR])
+    subprocess.call(['open', KELP_DIR])
 
 @click.command()
 @click.argument('package')
@@ -355,11 +356,63 @@ def upgrade():
     except Exception as e:
         print(f"✗ Error installing {package}:{release}. \n{e}")
 
+def find_semver(version_str):
+    rexpression = "v?(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?"
+    match = re.search(rexpression, version_str)
+    if match:
+        return match[0]
+    else:
+        return None
+
+def find_local_version(package):
+    try:
+        process = subprocess.run([package, 'version'],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        universal_newlines=True)
+        if process.returncode == 0:
+            version = find_semver(process.stdout)
+            print(f'===> {package} local version: {version}')
+        elif process.returncode == 1 or 2:
+            process = subprocess.run([package, '--version'],
+                    stdout=subprocess.PIPE,
+                    universal_newlines=True)
+            version = find_semver(process.stdout)
+            print(f'===> {package} local version: {version}')
+        else:
+            print(f'===> {package} could not find version')
+
+    except FileNotFoundError:
+        print(f"{package} not installed")
+
+def find_remote_version(package):
+    # allow users to use shortname istio instead of istio/istio
+    packages = load_config()
+    package = find_fullpkg_name(packages, package)
+    owner, repo = package.split("/")
+
+    api_token = os.getenv('GITHUB_TOKEN', None)
+    api_username = os.getenv('GITHUB_USERNAME', None)
+    release = "latest"
+    if api_token and api_username:
+        r = requests.get(
+            f'https://api.github.com/repos/{owner}/{repo}/releases/{release}', auth=(api_username, api_token))
+    else:
+        r = requests.get(
+            f'https://api.github.com/repos/{owner}/{repo}/releases/{release}')
+    response = r.json()
+    version = response['tag_name']
+    print(f'===> {package} remote version: {version}')
+
+@click.command()
+@click.argument('package')
+def version(package):
+    find_remote_version(package)
+    find_local_version(package)
 
 @click.group()
 def cli():
     pass
-
 
 cli.add_command(list)
 cli.add_command(install)
@@ -370,6 +423,7 @@ cli.add_command(remove)
 cli.add_command(inspect)
 cli.add_command(browse)
 cli.add_command(upgrade)
+cli.add_command(version)
 
 if __name__ == "__main__":
     cli()
