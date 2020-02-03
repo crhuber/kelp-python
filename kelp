@@ -328,7 +328,7 @@ def remove(package):
 
 @click.command()
 def inspect():
-    call(['open', KELP_DIR])
+    subprocess.call(['open', KELP_DIR])
 
 @click.command()
 @click.argument('package')
@@ -379,6 +379,9 @@ def find_local_version(package):
                     universal_newlines=True)
             version = find_semver(process.stdout)
             print(f'===> {package} local version: {version}')
+        else:
+            print(f'===> {package} could not find version')
+
     except FileNotFoundError:
         print(f"{package} not installed")
 
@@ -404,8 +407,8 @@ def find_remote_version(package):
 @click.command()
 @click.argument('package')
 def version(package):
-    find_local_version(package)
     find_remote_version(package)
+    find_local_version(package)
 
 @click.group()
 def cli():
