@@ -48,7 +48,6 @@ def file_is_binary(filepath):
         file = open(filepath, "rb").read(32)
         hex_bytes = " ".join(['{:02X}'.format(byte) for byte in file])
         # print(f"{filepath}: {hex_bytes}")
-        match = False
         for signature in signatures:
             if hex_bytes.startswith(signature) and not filepath.endswith((".dylib", ".tgz", ".gz", ".zip", ".pkg", ".app", ".saver")):
                 return True
@@ -131,30 +130,32 @@ def find_release_assets(owner, repo, release):
     """Makes a request to github and finds all releases for a repo"""
     api_token = os.getenv('GITHUB_TOKEN', None)
     api_username = os.getenv('GITHUB_USERNAME', None)
-
-    # else just get the latest
-    if release == "latest":
-        if api_token and api_username:
-            r = requests.get(
-                f'https://api.github.com/repos/{owner}/{repo}/releases/{release}', auth=(api_username, api_token))
+    try:
+        # else just get the latest
+        if release == "latest":
+            if api_token and api_username:
+                r = requests.get(
+                    f'https://api.github.com/repos/{owner}/{repo}/releases/{release}', auth=(api_username, api_token))
+            else:
+                r = requests.get(
+                    f'https://api.github.com/repos/{owner}/{repo}/releases/{release}')
+            response = r.json()
+            assets = response['assets']
+            return assets
         else:
-            r = requests.get(
-                f'https://api.github.com/repos/{owner}/{repo}/releases/{release}')
-        response = r.json()
-        assets = response['assets']
-        return assets
-    else:
-        # get releases by tag
-        if api_token and api_username:
-            r = requests.get(
-                f'https://api.github.com/repos/{owner}/{repo}/releases', auth=(api_username, api_token))
-        else:
-            r = requests.get(
-                f'https://api.github.com/repos/{owner}/{repo}/releases')
-        response = r.json()
-        for rel in response:
-            if rel['tag_name'] == release:
-                return rel['assets']
+            # get releases by tag
+            if api_token and api_username:
+                r = requests.get(
+                    f'https://api.github.com/repos/{owner}/{repo}/releases', auth=(api_username, api_token))
+            else:
+                r = requests.get(
+                    f'https://api.github.com/repos/{owner}/{repo}/releases')
+            response = r.json()
+            for rel in response:
+                if rel['tag_name'] == release:
+                    return rel['assets']
+    except Exception as e:
+        print(f"✗ Error connecting to github: \n {e}")
 
 def download_package(package, release):
     owner, repo = package.split("/")
