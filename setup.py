@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="klp",  # Replace with your own username
-    version=attr: build.__version__.VERSION
+    version = build.__version__.VERSION
     author="crhuber",
     author_email="crhuber@example.com",
     description="python replacement for homebrew",
