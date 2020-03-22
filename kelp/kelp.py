@@ -1,4 +1,3 @@
-#! /usr/bin/env python
 import json
 import os
 import pprint
@@ -27,6 +26,7 @@ KELP_DIR = home + '/.kelp/'
 KELP_BIN = home + '/.kelp/bin/'
 CACHE_DIR = home + '/.kelp/cache/'  # needs the trailing slash
 
+
 def load_config():
     try:
         with open(KELP_DIR + '.kelp.json', 'r') as file:
@@ -36,6 +36,7 @@ def load_config():
     except FileNotFoundError:
         print("Kelp config file not found")
         sys.exit(1)
+
 
 def file_is_binary(filepath):
     signatures = [
@@ -55,12 +56,14 @@ def file_is_binary(filepath):
     except IsADirectoryError:
         return False
 
+
 def unzip_file(filepath):
     print(f"Unzipping {filepath}")
     extract_dir = tempfile.mkdtemp()
     with ZipFile(filepath, 'r') as zipObj:
         zipObj.extractall(path=extract_dir)
     return extract_dir
+
 
 def untar_file(filepath):
     print(f"Unzipping {filepath}")
@@ -69,8 +72,10 @@ def untar_file(filepath):
         tar.extractall(path=extract_dir)
     return extract_dir
 
+
 def exists_in_cache(filepath):
     return path.exists(filepath)
+
 
 def download(download_url, filename):
     print(f"Downloading {filename}")
@@ -83,6 +88,7 @@ def download(download_url, filename):
         return downloaded
     except:
         return downloaded
+
 
 def extract_package(filepath):
     extract_dir = None
@@ -117,6 +123,7 @@ def move_binaries(extract_dir):
                     print(f"Moving executable {filename} to Kelp bin..")
                     shutil.copy2(filepath, KELP_BIN)
 
+
 def make_binaries_executable():
     for (dirpath, dirnames, filenames) in walk(KELP_BIN):
         for filename in filenames:
@@ -125,6 +132,7 @@ def make_binaries_executable():
                 # add executable bit to file
                 st = os.stat(filepath)
                 os.chmod(filepath, 0o775)
+
 
 def find_release_assets(owner, repo, release):
     """Makes a request to github and finds all releases for a repo"""
@@ -157,6 +165,7 @@ def find_release_assets(owner, repo, release):
     except Exception as e:
         print(f"✗ Error connecting to github: \n {e}")
 
+
 def download_package(package, release):
     owner, repo = package.split("/")
     install_result = {}
@@ -188,6 +197,7 @@ def download_package(package, release):
                 install_result['filepath'] = filepath
     return install_result
 
+
 def get_asset_dl_url(assets):
     """
     For a list of given release assetes, tries to find one for mac that is appropriate
@@ -214,6 +224,7 @@ def get_asset_dl_url(assets):
 
     return download
 
+
 def find_fullpkg_name(packages, shortname):
     """ Allow users to use shortname istio instead of istio/istio """
     package_found = False
@@ -226,6 +237,7 @@ def find_fullpkg_name(packages, shortname):
     if not package_found:
         print(f"Package not found in your config, try installing it first")
         exit()
+
 
 @click.command()
 def init():
@@ -244,6 +256,7 @@ def list():
     packages = load_config()
     for package, release in packages.items():
         print(f"{package}:{release}")
+
 
 @click.command()
 @click.argument('package')
@@ -267,7 +280,6 @@ def update(package):
             print(f"✗ Error installing {package}:{release}")
     except Exception as e:
         print(f"✗ Error installing {package}:{release}. \n {e}")
-
 
 
 @click.command()
@@ -318,6 +330,7 @@ def add(package, release="latest"):
     with open(KELP_DIR + '.kelp.json', "w") as file:
         json.dump(packages, file, indent=4)
 
+
 @click.command()
 @click.argument('package')
 def remove(package):
@@ -327,17 +340,20 @@ def remove(package):
     with open(KELP_DIR + '.kelp.json', "w") as file:
         json.dump(packages, file, indent=4)
 
+
 @click.command()
 def inspect():
     subprocess.call(['open', KELP_DIR])
+
 
 @click.command()
 @click.argument('package')
 def browse(package):
     packages = load_config()
     package = find_fullpkg_name(packages, package)
-    url = 'https://github.com/'+ package
+    url = 'https://github.com/' + package
     webbrowser.open(url, new=2)
+
 
 @click.command()
 def upgrade():
@@ -357,6 +373,7 @@ def upgrade():
     except Exception as e:
         print(f"✗ Error installing {package}:{release}. \n{e}")
 
+
 def find_semver(version_str):
     rexpression = "v?(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?"
     match = re.search(rexpression, version_str)
@@ -365,19 +382,20 @@ def find_semver(version_str):
     else:
         return None
 
+
 def find_local_version(package):
     try:
         process = subprocess.run([package, 'version'],
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        universal_newlines=True)
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE,
+                                 universal_newlines=True)
         if process.returncode == 0:
             version = find_semver(process.stdout)
             print(f'===> {package} local version: {version}')
         elif process.returncode == 1 or 2:
             process = subprocess.run([package, '--version'],
-                    stdout=subprocess.PIPE,
-                    universal_newlines=True)
+                                     stdout=subprocess.PIPE,
+                                     universal_newlines=True)
             version = find_semver(process.stdout)
             print(f'===> {package} local version: {version}')
         else:
@@ -385,6 +403,7 @@ def find_local_version(package):
 
     except FileNotFoundError:
         print(f"{package} not installed")
+
 
 def find_remote_version(package):
     # allow users to use shortname istio instead of istio/istio
@@ -405,15 +424,18 @@ def find_remote_version(package):
     version = response['tag_name']
     print(f'===> {package} remote version: {version}')
 
+
 @click.command()
 @click.argument('package')
 def version(package):
     find_remote_version(package)
     find_local_version(package)
 
+
 @click.group()
 def cli():
     pass
+
 
 cli.add_command(list)
 cli.add_command(install)
@@ -425,6 +447,3 @@ cli.add_command(inspect)
 cli.add_command(browse)
 cli.add_command(upgrade)
 cli.add_command(version)
-
-if __name__ == "__main__":
-    cli()
